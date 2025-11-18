@@ -1,0 +1,34 @@
+[package]
+name = "deepboot"
+version = "0.1.0"
+edition = "2021"
+authors = ["Mehmet T. AKALIN"]
+description = "Find startup apps that legacy cleaners miss"
+license = "MIT"
+repository = "https://github.com/makalin/DeepBoot"
+
+[dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Registry",
+    "Win32_System_SystemServices",
+    "Win32_System_TaskScheduler",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+] }
+winreg = "0.52"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+csv = "1.3"
+ratatui = "0.26"
+crossterm = "0.28"
+anyhow = "1.0"
+thiserror = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+log = "0.4"
+env_logger = "0.11"
+lazy_static = "1.4"
+
