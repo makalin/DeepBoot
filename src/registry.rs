@@ -1,7 +1,7 @@
 use crate::models::{StartupEntry, StartupSource};
 use anyhow::{Context, Result};
 use winreg::enums::*;
-use winreg::RegKey;
+use winreg::{RegKey, HKEY};
 
 pub struct RegistryScanner;
 
@@ -53,14 +53,13 @@ impl RegistryScanner {
         if let Ok(subkey) = hkey_root.open_subkey(base_path) {
             if let Ok(run_key) = subkey.open_subkey(subkey_name) {
                 for (name, value) in run_key.enum_values().flatten() {
-                    if let Ok(command) = value.to_string() {
-                        entries.push(StartupEntry::new(
-                            name,
-                            command,
-                            source.clone(),
-                            true,
-                        ));
-                    }
+                    let command = value.to_string();
+                    entries.push(StartupEntry::new(
+                        name,
+                        command,
+                        source.clone(),
+                        true,
+                    ));
                 }
             }
         }
@@ -75,14 +74,13 @@ impl RegistryScanner {
 
         if let Ok(run_services) = hklm.open_subkey(path) {
             for (name, value) in run_services.enum_values().flatten() {
-                if let Ok(command) = value.to_string() {
-                    entries.push(StartupEntry::new(
-                        name,
-                        command,
-                        StartupSource::RegistryRunServices,
-                        true,
-                    ));
-                }
+                let command = value.to_string();
+                entries.push(StartupEntry::new(
+                    name,
+                    command,
+                    StartupSource::RegistryRunServices,
+                    true,
+                ));
             }
         }
 
@@ -96,14 +94,13 @@ impl RegistryScanner {
 
         if let Ok(wow_key) = hklm.open_subkey(path) {
             for (name, value) in wow_key.enum_values().flatten() {
-                if let Ok(command) = value.to_string() {
-                    entries.push(StartupEntry::new(
-                        name,
-                        command,
-                        StartupSource::RegistryWow6432Node,
-                        true,
-                    ));
-                }
+                let command = value.to_string();
+                entries.push(StartupEntry::new(
+                    name,
+                    command,
+                    StartupSource::RegistryWow6432Node,
+                    true,
+                ));
             }
         }
 
@@ -156,14 +153,9 @@ impl RegistryScanner {
             .open_subkey_with_flags(subkey_name, KEY_WRITE)
             .context("Failed to open Run subkey")?;
 
-        // Rename the entry to disable it
-        let disabled_name = format!("{}_DISABLED", entry.name);
-        if let Ok(_) = run_key.rename_value(&entry.name, &disabled_name) {
-            Ok(())
-        } else {
-            // If rename fails, try to delete
-            run_key.delete_value(&entry.name).context("Failed to disable entry")
-        }
+        // Disable by deleting the value (we can't rename in winreg 0.52)
+        // The entry will be removed, which effectively disables it
+        run_key.delete_value(&entry.name).context("Failed to disable entry")
     }
 
     pub fn remove_entry(entry: &StartupEntry) -> Result<()> {

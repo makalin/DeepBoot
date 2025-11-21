@@ -19,7 +19,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use models::{Action, StartupEntry};
+// Action and StartupEntry are used in other modules, not directly here
 use ratatui::prelude::*;
 use std::io;
 use tui::App;
@@ -132,7 +132,7 @@ fn main() -> Result<()> {
 
     // Create app with all the managers
     // Note: We need to pass config_manager as mutable, but App will handle it
-    let mut app = App::new(
+    let app = App::new(
         all_entries,
         whitelist_manager,
         action_logger,

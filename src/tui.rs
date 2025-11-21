@@ -1,5 +1,5 @@
 use crate::actions::handle_action;
-use crate::batch::{BatchProcessor, BatchResult};
+use crate::batch::BatchProcessor;
 use crate::config::ConfigManager;
 use crate::export::Exporter;
 use crate::filter::{Filter, SortBy};
@@ -17,7 +17,6 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
     Frame, Terminal,
 };
-use std::io;
 
 #[derive(PartialEq)]
 enum ViewMode {
@@ -56,7 +55,7 @@ impl App {
         let mut filter = Filter::new();
         
         // Apply default sort from config
-        let sort_by = match config_manager.borrow().get().default_sort.as_str() {
+        let sort_by = match config_manager.get().default_sort.as_str() {
             "name" => SortBy::Name,
             "source" => SortBy::Source,
             "status" => SortBy::Status,
@@ -116,9 +115,9 @@ impl App {
 
     pub fn apply_filter(&mut self) {
         self.filtered_entries = if !self.search_term.is_empty() {
-            self.filter.with_search(self.search_term.clone()).apply(&self.all_entries)
+            self.filter.clone().with_search(self.search_term.clone()).apply(&self.all_entries)
         } else {
-            self.filter.apply(&self.all_entries)
+            self.filter.clone().apply(&self.all_entries)
         };
         crate::filter::sort_entries(&mut self.filtered_entries, self.sort_by);
         self.stats = ScanStatistics::from_entries(&self.filtered_entries);
@@ -242,10 +241,12 @@ pub fn run_app<B: Backend>(
                                     app.selected_indices.len()
                                 ));
                             } else if let Some(entry) = app.get_selected_entry() {
-                                app.pending_action = Some((Action::Disable, vec![app.get_original_index(app.selected_index)]));
+                                let entry_name = entry.name.clone();
+                                let index = app.get_original_index(app.selected_index);
+                                app.pending_action = Some((Action::Disable, vec![index]));
                                 app.set_message(format!(
                                     "Press 'y' to disable '{}' or 'n' to cancel",
-                                    entry.name
+                                    entry_name
                                 ));
                             }
                         }
@@ -260,10 +261,12 @@ pub fn run_app<B: Backend>(
                                     app.selected_indices.len()
                                 ));
                             } else if let Some(entry) = app.get_selected_entry() {
-                                app.pending_action = Some((Action::Remove, vec![app.get_original_index(app.selected_index)]));
+                                let entry_name = entry.name.clone();
+                                let index = app.get_original_index(app.selected_index);
+                                app.pending_action = Some((Action::Remove, vec![index]));
                                 app.set_message(format!(
                                     "Press 'y' to remove '{}' or 'n' to cancel",
-                                    entry.name
+                                    entry_name
                                 ));
                             }
                         }
@@ -284,9 +287,10 @@ pub fn run_app<B: Backend>(
                     KeyCode::Char('w') => {
                         if app.pending_action.is_none() {
                             if let Some(entry) = app.get_selected_entry() {
-                                match app.whitelist_manager.add_to_whitelist(entry) {
+                                let entry_clone = entry.clone();
+                                match app.whitelist_manager.add_to_whitelist(&entry_clone) {
                                     Ok(_) => {
-                                        app.set_message(format!("Added '{}' to whitelist", entry.name));
+                                        app.set_message(format!("Added '{}' to whitelist", entry_clone.name));
                                     }
                                     Err(e) => {
                                         app.set_message(format!("Failed to whitelist: {}", e));
@@ -318,16 +322,16 @@ pub fn run_app<B: Backend>(
                     }
                     KeyCode::Char('y') => {
                         if let Some((action, indices)) = app.pending_action.take() {
-                            let entries_to_process: Vec<&StartupEntry> = indices
+                            let entries_to_process: Vec<StartupEntry> = indices
                                 .iter()
-                                .filter_map(|&idx| app.all_entries.get(idx))
+                                .filter_map(|&idx| app.all_entries.get(idx).cloned())
                                 .collect();
 
                             if entries_to_process.len() > 1 {
                                 // Batch operation
                                 let batch_processor = BatchProcessor::new(Some(app.logger.clone()));
                                 let result = batch_processor.process_batch(
-                                    &entries_to_process.iter().map(|e| (*e).clone()).collect::<Vec<_>>(),
+                                    &entries_to_process,
                                     action,
                                 );
                                 app.set_message(result.summary());
@@ -336,39 +340,40 @@ pub fn run_app<B: Backend>(
                                 app.apply_filter();
                             } else if let Some(entry) = entries_to_process.first() {
                                 // Single operation
+                                let entry_name = entry.name.clone();
                                 match handle_action(entry, action) {
                                     Ok(_) => {
                                         let _ = app.logger.log_action(
                                             &action.to_string(),
-                                            &entry.name,
+                                            &entry_name,
                                             true,
                                             None,
                                         );
                                         app.set_message(format!(
                                             "Successfully {}d '{}'",
                                             action,
-                                            entry.name
+                                            entry_name
                                         ));
                                         if let Action::Disable = action {
-                                            if let Some(e) = app.all_entries.iter_mut().find(|e| e.name == entry.name) {
+                                            if let Some(e) = app.all_entries.iter_mut().find(|e| e.name == entry_name) {
                                                 e.enabled = false;
                                             }
                                         } else if let Action::Remove = action {
-                                            app.all_entries.retain(|e| e.name != entry.name);
+                                            app.all_entries.retain(|e| e.name != entry_name);
                                         }
                                         app.apply_filter();
                                     }
                                     Err(e) => {
                                         let _ = app.logger.log_action(
                                             &action.to_string(),
-                                            &entry.name,
+                                            &entry_name,
                                             false,
                                             Some(&e.to_string()),
                                         );
                                         app.set_message(format!(
                                             "Error: Failed to {} '{}': {}",
                                             action,
-                                            entry.name,
+                                            entry_name,
                                             e
                                         ));
                                     }
@@ -387,7 +392,7 @@ pub fn run_app<B: Backend>(
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
+fn ui(f: &mut Frame, app: &App) {
     match app.view_mode {
         ViewMode::Stats => {
             render_stats_view(f, app);
@@ -401,7 +406,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &App) {
     }
 }
 
-fn render_list_view<B: Backend>(f: &mut Frame<B>, app: &App) {
+fn render_list_view(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -484,7 +489,7 @@ fn render_list_view<B: Backend>(f: &mut Frame<B>, app: &App) {
                 Style::default().fg(Color::Gray),
             );
 
-            ListItem::new(vec![selection_indicator, enabled_indicator, source, name, command])
+            ListItem::new(Line::from(vec![selection_indicator, enabled_indicator, source, name, command]))
         })
         .collect();
 
@@ -564,7 +569,7 @@ fn render_list_view<B: Backend>(f: &mut Frame<B>, app: &App) {
     }
 }
 
-fn render_stats_view<B: Backend>(f: &mut Frame<B>, app: &App) {
+fn render_stats_view(f: &mut Frame, app: &App) {
     let stats_text = app.stats.get_summary();
     let stats_lines: Vec<Line> = stats_text
         .lines()
@@ -583,7 +588,7 @@ fn render_stats_view<B: Backend>(f: &mut Frame<B>, app: &App) {
     f.render_widget(stats_paragraph, f.size());
 }
 
-fn render_help_view<B: Backend>(f: &mut Frame<B>, app: &App) {
+fn render_help_view(f: &mut Frame, _app: &App) {
     let help_text = vec![
         Line::from(""),
         Line::from(Span::styled("Navigation:", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),

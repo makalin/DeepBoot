@@ -1,7 +1,6 @@
 use crate::actions::handle_action;
 use crate::logger::ActionLogger;
 use crate::models::{Action, StartupEntry};
-use anyhow::Result;
 
 pub struct BatchProcessor {
     logger: Option<ActionLogger>,

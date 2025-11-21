@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use chrono::Local;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::PathBuf;
 use std::sync::Mutex;
 
 #[derive(Clone)]

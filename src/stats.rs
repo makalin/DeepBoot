@@ -1,4 +1,4 @@
-use crate::models::{StartupEntry, StartupSource};
+use crate::models::StartupEntry;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

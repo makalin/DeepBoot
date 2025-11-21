@@ -51,11 +51,11 @@ impl ServicesScanner {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&output_str) {
             let mut entries = Vec::new();
             
-            let services = if json.is_array() {
-                json.as_array().unwrap()
+            let services: Vec<&serde_json::Value> = if json.is_array() {
+                json.as_array().unwrap().iter().collect()
             } else if json.is_object() {
                 // Single service
-                vec![json]
+                vec![&json]
             } else {
                 return Ok(Vec::new());
             };
