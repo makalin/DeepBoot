@@ -9,7 +9,7 @@ use windows::{
 use windows::core::GUID;
 
 // TaskScheduler CLSID: {0F87369F-A4E5-4CFC-BD3E-73E6154572DD}
-const CLSID_TaskScheduler: GUID = GUID::from_u128(0x0F87369F_A4E5_4CFC_BD3E_73E6154572DD);
+const CLSID_TASK_SCHEDULER: GUID = GUID::from_u128(0x0F87369F_A4E5_4CFC_BD3E_73E6154572DD);
 
 pub struct TaskSchedulerScanner;
 
@@ -20,29 +20,32 @@ impl TaskSchedulerScanner {
                 .ok()
                 .context("Failed to initialize COM")?;
 
-            let task_service: ITaskService = CoCreateInstance(
-                &CLSID_TaskScheduler,
-                None,
-                CLSCTX_INPROC_SERVER,
-            )
-            .context("Failed to create TaskScheduler COM object")?;
-
-            task_service
-                .Connect(
+            let entries = {
+                let task_service: ITaskService = CoCreateInstance(
+                    &CLSID_TASK_SCHEDULER,
                     None,
-                    None,
-                    None,
-                    None,
+                    CLSCTX_INPROC_SERVER,
                 )
-                .ok()
-                .context("Failed to connect to Task Scheduler")?;
+                .context("Failed to create TaskScheduler COM object")?;
 
-            let root_folder = task_service
-                .GetFolder(&BSTR::from("\\"))
-                .context("Failed to get root folder")?;
+                task_service
+                    .Connect(
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .ok()
+                    .context("Failed to connect to Task Scheduler")?;
 
-            let mut entries = Vec::new();
-            Self::scan_folder(&root_folder, &mut entries)?;
+                let root_folder = task_service
+                    .GetFolder(&BSTR::from("\\"))
+                    .context("Failed to get root folder")?;
+
+                let mut entries = Vec::new();
+                Self::scan_folder(&root_folder, &mut entries)?;
+                entries
+            };
 
             CoUninitialize();
             Ok(entries)
@@ -171,40 +174,42 @@ impl TaskSchedulerScanner {
                 .ok()
                 .context("Failed to initialize COM")?;
 
-            let task_service: ITaskService = CoCreateInstance(
-                &CLSID_TaskScheduler,
-                None,
-                CLSCTX_INPROC_SERVER,
-            )
-            .context("Failed to create TaskScheduler COM object")?;
-
-            task_service
-                .Connect(
+            {
+                let task_service: ITaskService = CoCreateInstance(
+                    &CLSID_TASK_SCHEDULER,
                     None,
-                    None,
-                    None,
-                    None,
+                    CLSCTX_INPROC_SERVER,
                 )
-                .ok()
-                .context("Failed to connect to Task Scheduler")?;
+                .context("Failed to create TaskScheduler COM object")?;
 
-            // Find the task by name
-            let root_folder = task_service
-                .GetFolder(&BSTR::from("\\"))
-                .context("Failed to get root folder")?;
+                task_service
+                    .Connect(
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .ok()
+                    .context("Failed to connect to Task Scheduler")?;
 
-            if let Ok((folder, task_path)) = Self::find_task_path(&root_folder, &entry.name) {
-                // Use schtasks command line tool as a reliable way to disable tasks
-                // The COM interface's put_Enabled method is not easily accessible in windows-rs
-                use std::process::Command;
-                let output = Command::new("schtasks")
-                    .args(&["/Change", "/TN", &task_path, "/Disable"])
-                    .output()
-                    .context("Failed to execute schtasks command")?;
-                
-                if !output.status.success() {
-                    let error_msg = String::from_utf8_lossy(&output.stderr);
-                    anyhow::bail!("Failed to disable task: {}", error_msg);
+                // Find the task by name
+                let root_folder = task_service
+                    .GetFolder(&BSTR::from("\\"))
+                    .context("Failed to get root folder")?;
+
+                if let Ok((folder, task_path)) = Self::find_task_path(&root_folder, &entry.name) {
+                    // Use schtasks command line tool as a reliable way to disable tasks
+                    // The COM interface's put_Enabled method is not easily accessible in windows-rs
+                    use std::process::Command;
+                    let output = Command::new("schtasks")
+                        .args(&["/Change", "/TN", &task_path, "/Disable"])
+                        .output()
+                        .context("Failed to execute schtasks command")?;
+                    
+                    if !output.status.success() {
+                        let error_msg = String::from_utf8_lossy(&output.stderr);
+                        anyhow::bail!("Failed to disable task: {}", error_msg);
+                    }
                 }
             }
 
@@ -219,29 +224,31 @@ impl TaskSchedulerScanner {
                 .ok()
                 .context("Failed to initialize COM")?;
 
-            let task_service: ITaskService = CoCreateInstance(
-                &CLSID_TaskScheduler,
-                None,
-                CLSCTX_INPROC_SERVER,
-            )
-            .context("Failed to create TaskScheduler COM object")?;
-
-            task_service
-                .Connect(
+            {
+                let task_service: ITaskService = CoCreateInstance(
+                    &CLSID_TASK_SCHEDULER,
                     None,
-                    None,
-                    None,
-                    None,
+                    CLSCTX_INPROC_SERVER,
                 )
-                .ok()
-                .context("Failed to connect to Task Scheduler")?;
+                .context("Failed to create TaskScheduler COM object")?;
 
-            let root_folder = task_service
-                .GetFolder(&BSTR::from("\\"))
-                .context("Failed to get root folder")?;
+                task_service
+                    .Connect(
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .ok()
+                    .context("Failed to connect to Task Scheduler")?;
 
-            if let Ok((folder, task_name)) = Self::find_task_path(&root_folder, &entry.name) {
-                folder.DeleteTask(&BSTR::from(&task_name), 0).ok();
+                let root_folder = task_service
+                    .GetFolder(&BSTR::from("\\"))
+                    .context("Failed to get root folder")?;
+
+                if let Ok((folder, task_name)) = Self::find_task_path(&root_folder, &entry.name) {
+                    folder.DeleteTask(&BSTR::from(&task_name), 0).ok();
+                }
             }
 
             CoUninitialize();
